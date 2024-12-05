@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mở rộng tìm kiếm</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    input, button {
+      margin-top: 5px;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .output {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Tìm kiếm Website</h1>
+    <form id="searchForm">
+      <label for="keyword">Nhập ngành nghề (từ khóa):</label>
+      <input type="text" id="keyword" placeholder="Ví dụ: mỹ phẩm, quần áo, laptop" required>
+      
+      <label for="location">Nhập địa chỉ:</label>
+      <input type="text" id="location" placeholder="Ví dụ: Hồ Chí Minh, Tân Bình, Quận 1" required>
+      
+      <button type="submit">Tìm kiếm</button>
+    </form>
+    
+    <div class="output" id="output">
+      <!-- Kết quả sẽ hiển thị tại đây -->
+    </div>
+  </div>
+
+  <script>
+    // Thay thế API_KEY và CX bằng giá trị của bạn
+    const API_KEY = "AIzaSyBRdnIDkJWzWI2lotWEbrEKSHFXxE3zQ5U";
+    const CX = "13bb74cfa19484c23";
+
+    document.getElementById('searchForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      
+      const keyword = document.getElementById('keyword').value.trim();
+      const location = document.getElementById('location').value.trim();
+      
+      if (!keyword || !location) {
+        alert('Vui lòng nhập từ khóa và địa chỉ.');
+        return;
+      }
+
+      const outputDiv = document.getElementById('output');
+      outputDiv.innerHTML = `<p>Đang tìm kiếm website liên quan đến "${keyword}" tại "${location}"...</p>`;
+
+      try {
+        const results = await searchGoogle(keyword, location);
+        if (results.length > 0) {
+          const filteredResults = await filterOrderWebsites(results);
+          displayResults(filteredResults);
+          exportToCSV(filteredResults);
+        } else {
+          outputDiv.innerHTML = `<p>Không tìm thấy kết quả phù hợp.</p>`;
+        }
+      } catch (error) {
+        console.error(error);
+        outputDiv.innerHTML = `<p>Có lỗi xảy ra. Vui lòng thử lại sau.</p>`;
+      }
+    });
+
+    async function searchGoogle(keyword, location) {
+      const query = `${keyword} ${location}`;
+      let results = [];
+      let start = 1;
+
+      // Google API chỉ cho phép tìm 10 kết quả mỗi lần, do đó cần lặp lại nhiều lần để mở rộng số lượng kết quả
+      while (start <= 50) { // Tối đa 50 kết quả (nâng lên nếu cần)
+        const apiUrl = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${API_KEY}&cx=${CX}&start=${start}`;
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+
+        if (data.items) {
+          results = results.concat(data.items.map(item => item.link));
+        }
+
+        if (!data.queries?.nextPage) break; // Dừng nếu không còn trang tiếp theo
+        start += 10;
+      }
+
+      return results;
+    }
+
+    async function filterOrderWebsites(urls) {
+      const filtered = [];
+      const keywords = ['đặt hàng', 'mua hàng', 'thanh toán', 'giỏ hàng'];
+
+      for (const url of urls) {
+        try {
+          const response = await fetch(url);
+          const html = await response.text();
+          if (keywords.some(keyword => html.toLowerCase().includes(keyword.toLowerCase()))) {
+            filtered.push(url);
+          }
+        } catch (error) {
+          console.error(`Không thể kiểm tra URL: ${url}`, error);
+        }
+      }
+      
+      return filtered;
+    }
+
+    function displayResults(results) {
+      const outputDiv = document.getElementById('output');
+      const listHtml = results.map(url => `<li><a href="${url}" target="_blank">${url}</a></li>`).join('');
+      outputDiv.innerHTML = `<h3>Kết quả lọc website có chức năng đặt hàng:</h3><ul>${listHtml}</ul>`;
+    }
+
+    function exportToCSV(results) {
+      const csvContent = "data:text/csv;charset=utf-8," + results.join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "websites_with_order.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
